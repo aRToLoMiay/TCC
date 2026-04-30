@@ -1,0 +1,12 @@
+# MSVC files.
+\.vc\
+*.sln
+*.pyproj
+
+# Python files.
+\__pycache__\
+\env\
+
+# Test files.
+\_result\
+*.tex
