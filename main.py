@@ -18,4 +18,3 @@ if __name__ == "__main__":
     content = "\\newcommand{\\E}{exp} sometext\\Expeditor \\E123"
     c = LatexCommand("\E", 0, "exp")
     print(substitute_command(content, c))
-
