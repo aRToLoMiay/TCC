@@ -16,6 +16,7 @@ def next_word_pos(content, word, position=0):
     match = compiled.search(content, position).end()
     return match if match else -1
 
+
 def get_parameters_count(content, position):
     if content[position] != '[':
         return 0, position
@@ -33,7 +34,10 @@ def get_command_designation(content, position):
     counter = 1
     pos = position + 1
     while counter > 0:
-        match = compiled.search(content, pos=pos).end()
+        match = compiled.search(content, pos=pos)
+        if not match:
+            raise ValueError("Incorrect content: didn't find close '}' symbol in command.")
+        match = match.end()
         if is_ecranned(content, match):
             continue
         if content[match - 1] == '{':
@@ -41,8 +45,6 @@ def get_command_designation(content, position):
         else:
             counter = counter - 1
         pos = match
-        if match == -1:
-            raise ValueError("Incorrect content: didn't find close '}' symbol in command.")
     return content[position + 1:pos - 1]
 
 
@@ -60,9 +62,32 @@ def extract_commands(content):
     position = 0
 
     while True:
-        position = find_next_command_pos(content, position)
-        if position == -1:
-            break
+        try:
+            position = find_next_command_pos(content, position)
+            if position == -1:
+                break
+
+            name = get_command_designation(content, position)
+            position += len(name) + 2
+            count, position = get_parameters_count(content, position)
+            signature = get_command_designation(content, position)
+            position += len(signature) + 2
+        
+            c = LatexCommand(name, count, signature)
+            commands.append(c)
+        except Exception as e:
+            #print(f"Problem with extraction of command {name}: {e}")
+            pass
+
+    return commands
+
+
+def extract_next_command(content, position):
+    pos = position
+    try:
+        position = find_next_command_pos(content, pos)
+        if pos == -1:
+            return None
 
         name = get_command_designation(content, position)
         position += len(name) + 2
@@ -70,23 +95,8 @@ def extract_commands(content):
         signature = get_command_designation(content, position)
         position += len(signature) + 2
         
-        c = LatexCommand(name, signature, count)
-        commands.append(c)
-
-    for command in commands:
-        print(command.get_tex_str())
-    return commands
-
-
-def substitute_command(content, command):
-    position = 0
-    # position = next_word_pos(content, command, position)
-    # print(position)
-
-    pattern = f"(?<!newcommand{{){re.escape(command.name)}(?![a-zA-Z])"
-    result = re.sub(pattern, command.implementation, content)
-
-    for i in range(command.num_params):
+        c = LatexCommand(name, count, signature)
+    except Exception as e:
+        #print(f"Problem with extraction of command {name}: {e}")
         pass
-    
-    return result
+    return c

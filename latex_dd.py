@@ -3,7 +3,8 @@ import re
 from path_processor import *
 
 
-def collect_tex():
+
+def collect_tex_old():
     types = ('.tex', '.sty')
     files = collect_file_paths(get_app_path(), types)
 
