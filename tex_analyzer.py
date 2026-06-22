@@ -31,3 +31,21 @@ def substitute_command(content, command):
         position = command_pos + len(full_command) - 1
 
     return result
+
+
+def find_first_comment_position(content):
+    match = re.search(r'(?<!\\)%', content)
+    return match.start() if match else -1
+
+
+def find_first_line_end_position(content):
+    match = re.search(r'(?<!\\)(?:\\{2})*(?:\r?\n)', content)
+    return match.end() if match else -1
+
+
+def sty_to_commands(sty_file: str):
+    with open(sty_file, 'r', encoding='utf-8') as file:
+        content = file.read()
+
+    commands = []
+

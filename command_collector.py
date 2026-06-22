@@ -4,11 +4,14 @@ from latex_command import LatexCommand
 
 
 def find_next_command_pos(content, position=0):
-    words = ["newcommand", "renewcommand"]
+    words = ["newcommand", "renewcommand", "providecommand", "DeclareRobustCommand"]
     pattern = '|'.join(re.escape(word) for word in words)
     compiled = re.compile(pattern)
     match = compiled.search(content, position)
-    return match.end() if match else -1
+    if match:
+        return match.end(), match.group(0)
+    else:
+        return None, None
 
 
 def next_word_pos(content, word, position=0):
@@ -64,7 +67,7 @@ def extract_commands(content):
     while True:
         try:
             position = find_next_command_pos(content, position)
-            if position == -1:
+            if not position:
                 break
 
             name = get_command_designation(content, position)
