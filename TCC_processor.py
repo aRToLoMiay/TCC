@@ -1,18 +1,7 @@
-from command_collector import (
-    extract_commands_declarations,
-    extract_next_command,
-    extract_next_command_declaration,
-)
-from text_fragment import (
-    TextFragment,
-    collect_fragments_content,
-)
-from tex_analyzer import (
-    find_first_comment_position,
-    find_first_line_end_position,
-    sty_path_to_usepackage,
-)
+from command_collector import *
+from text_fragment import *
 
+import os
 import re
 
 
@@ -68,9 +57,10 @@ class TccProcessor:
         i = 0
         comment_before = False
         while True:
-            pos = find_first_comment_position(self._fragments[i].content)
-            if pos == -1:
+            match = re.search(r'(?<!\\)%', self._fragments[i].content)
+            if not match:
                 break
+            pos = match.start()
         
             comment_fragment = self._fragments[i].separate_tail(pos)
             comment_fragment.without_rules = True
@@ -81,9 +71,10 @@ class TccProcessor:
                 self._fragments.append(comment_fragment)
                 i += 1
         
-            pos = find_first_line_end_position(comment_fragment.content)
-            if pos == -1:
+            match = re.search(r'(?<!\\)(?:\\{2})*(?:\r?\n)', comment_fragment.content)
+            if not match:
                 break
+            pos = match.start()
         
             after_comment_fragment = comment_fragment.separate_tail(pos)
             after_comment_fragment.without_rules = False
@@ -106,7 +97,7 @@ class TccProcessor:
     
     def _extract_sty_commands(self):
         for sty in self.stys:
-            sty_str = sty_path_to_usepackage(sty, self._file)
+            sty_str = self._sty_path_to_usepackage(sty)
             pattern = re.escape("\\usepackage{" + sty_str + "}")
 
             i = 0
@@ -205,6 +196,34 @@ class TccProcessor:
     # ----------------------------------------
     # Auxiliary processor methods.
     # ----------------------------------------
+
+    def _sty_path_to_usepackage(self, sty_path: str) -> str:
+        """
+        Convert path to sty-file into usepackage view.
+        """
+        sty_path = os.path.normpath(sty_path)
+        tex_path = os.path.normpath(self._file)
+    
+        sty_parts = sty_path.split(os.sep)
+        tex_parts = tex_path.split(os.sep)
+    
+        common_parts = []
+        for p1, p2 in zip(sty_parts, tex_parts):
+            if p1 == p2:
+                common_parts.append(p1)
+            else:
+                break
+    
+        if not common_parts:
+            result = sty_path
+        else:
+            result_parts = sty_parts[len(common_parts):]
+            result = os.path.join(*result_parts)
+    
+        result = result.replace("\\", "/")
+        result = result.replace(".sty", "")
+        return result
+
 
     def _setup_rules(self, position, rules):
         for i in range(position, len(self._fragments)):

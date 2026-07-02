@@ -1,74 +1,16 @@
+from latex_command import *
+
 import re
 
-from latex_command import LatexCommand
+__all__ = [
+    'extract_commands_declarations',
+    'extract_next_command_declaration',
+    'extract_next_command',
+]
 
-
-def find_next_command_pos(content, position=0):
-    words = ["newcommand", "renewcommand", "providecommand", "DeclareRobustCommand"]
-    pattern = '|'.join(re.escape(word) for word in words)
-    compiled = re.compile(pattern)
-    match = compiled.search(content, position)
-    if match:
-        return match.start(), match.end(), match.group(0)
-    else:
-        return None, None, None
-
-
-def next_word_pos(content, word, position=0):
-    compiled = re.compile(word)
-    match = compiled.search(content, position).end()
-    return match if match else -1
-
-
-def get_parameters_count(content, position):
-    if content[position] != '[':
-        return 0, position
-    pattern = re.compile(re.escape(']'))
-    match = pattern.search(content, pos=position).end()
-    if match == -1:
-        raise ValueError("Incorrect content: didn't find close ']' symbol in command.")
-    return int(content[position + 1:match - 1]), match
-
-
-def get_default_value(content, position):
-    if content[position] != '[':
-        return None, position
-    pattern = re.compile(re.escape(']'))
-    match = pattern.search(content, pos=position).end()
-    if match == -1:
-        raise ValueError("Incorrect content: didn't find close ']' symbol in command.")
-    return content[position + 1:match - 1], match
-
-
-def get_command_designation(content, position):
-    compiled = re.compile(r'[{}]')
-    match = compiled.search(content, pos=position).end()
-
-    counter = 1
-    pos = position + 1
-    while counter > 0:
-        match = compiled.search(content, pos=pos)
-        if not match:
-            raise ValueError("Incorrect content: didn't find close '}' symbol in command.")
-        match = match.end()
-        if is_ecranned(content, match):
-            continue
-        if content[match - 1] == '{':
-            counter = counter + 1
-        else:
-            counter = counter - 1
-        pos = match
-    return content[position + 1:pos - 1]
-
-
-def is_ecranned(content, position):
-    count = 0
-    pos = position - 1
-    while content[pos] == '\\' and pos >= 0:
-        count += 1
-        pos -= 1
-    return count % 2 == 1
-
+# --------------------------------------------------------------------------------
+# Main extract methods.
+# --------------------------------------------------------------------------------
 
 def extract_commands_declarations(content):
     commands = []
@@ -84,15 +26,15 @@ def extract_commands_declarations(content):
 
 def extract_next_command_declaration(content, position):
     try:
-        start, position, cmd = find_next_command_pos(content, position)
+        start, position, cmd = _find_next_command_pos(content, position)
         if not position:
             return None, None, None
 
-        name = get_command_designation(content, position)
+        name = _get_command_designation(content, position)
         position += len(name) + 2
-        count, position = get_parameters_count(content, position)
-        default, position = get_default_value(content, position)
-        signature = get_command_designation(content, position)
+        count, position = _get_parameters_count(content, position)
+        default, position = _get_default_value(content, position)
+        signature = _get_command_designation(content, position)
         position += len(signature) + 2
         
         c = LatexCommand(command=cmd, 
@@ -138,9 +80,79 @@ def extract_next_command(content, position, command):
     for i in range(0, iter_count):
         if content[position] != '{':
             raise ValueError(f"Cannot find parameters for command {command.name} in text.")
-        cmd_params.append(get_command_designation(content, position))
+        cmd_params.append(_get_command_designation(content, position))
         position += len(cmd_params[-1]) + 2
     cmd_name = content[match.start():position + 1]
     cmd_impl = command.substitute_params(cmd_params)
 
     return cmd_name, cmd_impl, match.start()
+
+# --------------------------------------------------------------------------------
+# Additional methods.
+# --------------------------------------------------------------------------------
+
+def _find_next_command_pos(content, position=0):
+    words = ["newcommand", "renewcommand", "providecommand", "DeclareRobustCommand"]
+    pattern = '|'.join(re.escape(word) for word in words)
+    compiled = re.compile(pattern)
+    match = compiled.search(content, position)
+    if match:
+        return match.start(), match.end(), match.group(0)
+    else:
+        return None, None, None
+
+
+def _next_word_pos(content, word, position=0):
+    compiled = re.compile(word)
+    match = compiled.search(content, position).end()
+    return match if match else -1
+
+
+def _get_parameters_count(content, position):
+    if content[position] != '[':
+        return 0, position
+    pattern = re.compile(re.escape(']'))
+    match = pattern.search(content, pos=position).end()
+    if match == -1:
+        raise ValueError("Incorrect content: didn't find close ']' symbol in command.")
+    return int(content[position + 1:match - 1]), match
+
+
+def _get_default_value(content, position):
+    if content[position] != '[':
+        return None, position
+    pattern = re.compile(re.escape(']'))
+    match = pattern.search(content, pos=position).end()
+    if match == -1:
+        raise ValueError("Incorrect content: didn't find close ']' symbol in command.")
+    return content[position + 1:match - 1], match
+
+
+def _get_command_designation(content, position):
+    compiled = re.compile(r'[{}]')
+    match = compiled.search(content, pos=position).end()
+
+    counter = 1
+    pos = position + 1
+    while counter > 0:
+        match = compiled.search(content, pos=pos)
+        if not match:
+            raise ValueError("Incorrect content: didn't find close '}' symbol in command.")
+        match = match.end()
+        if _is_ecranned(content, match):
+            continue
+        if content[match - 1] == '{':
+            counter = counter + 1
+        else:
+            counter = counter - 1
+        pos = match
+    return content[position + 1:pos - 1]
+
+
+def _is_ecranned(content, position):
+    count = 0
+    pos = position - 1
+    while content[pos] == '\\' and pos >= 0:
+        count += 1
+        pos -= 1
+    return count % 2 == 1

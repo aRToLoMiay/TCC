@@ -1,5 +1,6 @@
 import re
 
+
 class LatexCommand:
     _id_count = 0
 

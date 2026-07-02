@@ -1,5 +1,6 @@
 import os
 
+
 class TextFragment:
     def __init__(self, content: str = "", tex_file_path: str = "", active_rules = None, without_rules: bool = False):
         """
