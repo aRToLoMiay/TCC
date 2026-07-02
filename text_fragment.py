@@ -11,17 +11,22 @@ class TextFragment:
         """
         self.content = content
         self.tex_file_path = tex_file_path
-        self.active_rules = active_rules if active_rules is not None else []
+        self.active_rules = active_rules.copy() if active_rules is not None else []
         self.without_rules = without_rules
 
 
     def add_rule(self, rule_id: int) -> None:
-        if rule_id not in self._active_rules:
+        if rule_id not in self.active_rules:
             self.active_rules.append(rule_id)
 
 
+    def add_rules(self, rule_ids) -> None:
+        for rule_id in rule_ids:
+            self.add_rule(rule_id)
+
+
     def remove_rule(self, rule_id: int) -> bool:
-        if rule_id in self._active_rules:
+        if rule_id in self.active_rules:
             self.active_rules.remove(rule_id)
             return True
         return False
@@ -36,7 +41,10 @@ class TextFragment:
 
 
     def create_copy(self) -> None:
-        copy = TextFragment(self.content, self.tex_file_path, self.active_rules, self.without_rules)
+        copy = TextFragment(self.content, 
+                            self.tex_file_path, 
+                            self.active_rules, 
+                            self.without_rules)
         return copy
 
 
