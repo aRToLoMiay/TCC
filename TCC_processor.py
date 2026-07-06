@@ -1,3 +1,4 @@
+from multiprocessing import process
 from command_collector import *
 from text_fragment import *
 
@@ -6,12 +7,27 @@ import re
 
 
 class TccProcessor:
-    def __init__(self, tex_files_list, sty_files_list = []):
+    def __init__(self, tex_files_list, sty_files_list = [], expand_includes = False):
         self.texs = tex_files_list
         self.stys = sty_files_list
         self._file = ""
         self._commands = {}
         self._fragments = []
+        self._active_rules = []
+        self._result_texts = {}
+        self._is_expand_includes = expand_includes
+        self._pre_setup = False
+
+
+    def setup_rules(self, active_rule_ids, commands):
+        self._clear()
+        self._active_rules.extend(active_rule_ids)
+        for key in active_rule_ids:
+            if key in commands:
+                self._commands[key] = commands[key]
+            else:
+                self._active_rules.remove(key)
+        self._pre_setup = True
 
 
     def process_tex(self, tex_file):
@@ -24,7 +40,8 @@ class TccProcessor:
             with open(tex_file, 'r', encoding='utf-8') as file:
                 content = file.read()
                 self._fragments.append(TextFragment(content=content, 
-                                                   tex_file_path=self._file))
+                                                   tex_file_path=self._file,
+                                                   active_rules=self._active_rules))
         except Exception as e:
             print(f"Error : File {self._file} cannot open.")
             return
@@ -32,23 +49,26 @@ class TccProcessor:
         # Process file content.
         self._separate_comments()
         self._clear_empty_fragments()
-        # <--- Add include{tex} fragments. Recursive?
         self._extract_sty_commands()
         self._extract_newcommands()
+        self._expand_tex_includes()
         self._unite_empty_fragments()
         self._expand_commands()
 
         # Result collection.
-        result = self._collect_content()
-        return result
+        self._result_texts[self._file] = self._collect_content()
+        return self._result_texts.copy()
         
     # ----------------------------------------
     # Functional methods.
     # ----------------------------------------
 
     def _clear(self):
-        self._commands = {}
+        if not self._pre_setup:
+            self._commands.clear()
+            self._active_rules.clear()
         self._fragments.clear()
+        self._result_texts.clear()
 
     # ----------------------------------------
     # Main processor methods.
@@ -94,10 +114,10 @@ class TccProcessor:
             if fragment.is_blank():
                 fragment.without_rules = True
 
-    
+
     def _extract_sty_commands(self):
         for sty in self.stys:
-            sty_str = self._sty_path_to_usepackage(sty)
+            sty_str = self._correct_path(sty)
             pattern = re.escape("\\usepackage{" + sty_str + "}")
 
             i = 0
@@ -126,7 +146,7 @@ class TccProcessor:
                     content = file.read()
                     commands = extract_commands_declarations(content)
 
-                self._setup_rules(i, commands)
+                self._add_rules(i, commands)
                 for cmd in commands:
                     self._commands[cmd.id] = cmd
 
@@ -151,7 +171,7 @@ class TccProcessor:
                     self._fragments.insert(i + 1, cmd_fragment)
                     i += 1
                     n += 2
-                    self._setup_rules(i, [c])
+                    self._add_rules(i, [c])
                     self._commands[c.id] = c
 
                     # Check existing command and update existing rules.
@@ -163,6 +183,54 @@ class TccProcessor:
             i += 1
 
 
+    def _expand_tex_includes(self):
+        for tex in self.texs:
+            if tex == self._file:
+                continue
+            tex_str = self._correct_path(tex)
+            pattern = re.escape("\\include{" + tex_str + "}")
+
+            i = 0
+            n = len(self._fragments)
+            while i < n:
+                fragment = self._fragments[i]
+                if fragment.without_rules:
+                    i += 1
+                    continue
+                result = re.search(pattern, fragment.content)
+                if result == None:
+                    i += 1
+                    continue
+            
+                # Split fragment with include to the parts.
+                sty_fragment = fragment.separate_tail(result.start())
+                after_sty_fragment = sty_fragment.separate_tail(len(pattern))
+                sty_fragment.without_rules = True
+                self._fragments.insert(i + 1, after_sty_fragment)
+                self._fragments.insert(i + 1, sty_fragment)
+                i += 2
+                n += 2
+
+                # Expand include tex-file.
+                processor = TccProcessor(tex_files_list=self.texs, 
+                                         sty_files_list=self.stys,
+                                         expand_includes=self._is_expand_includes)
+                processor.setup_rules(self._fragments[i].active_rules,
+                                      self._commands)
+                result = processor.process_tex(tex)
+                self._commands |= processor._commands
+                self._setup_rules(i, processor._fragments[-1].active_rules)
+
+                if self._is_expand_includes:
+                    self._fragments.pop(i - 1)
+                    for shift, item in enumerate(processor._fragments):
+                        self._fragments.insert(i + shift - 1, item)
+                    i += len(processor._fragments)
+                    n += len(processor._fragments) - 1
+                else:
+                    self._result_texts[tex] = result[tex]
+
+    
     def _unite_empty_fragments(self):
         self._clear_empty_fragments()
         i = 0
@@ -197,35 +265,49 @@ class TccProcessor:
     # Auxiliary processor methods.
     # ----------------------------------------
 
-    def _sty_path_to_usepackage(self, sty_path: str) -> str:
+    def _correct_path(self, path: str) -> str:
         """
-        Convert path to sty-file into usepackage view.
+        Correct path to file into usepackage view:
+        - sty paths for usepackge commands;
+        - tex paths for include commands.
         """
-        sty_path = os.path.normpath(sty_path)
-        tex_path = os.path.normpath(self._file)
+
+        input_path = os.path.normpath(path)
+        file_path = os.path.normpath(self._file)
     
-        sty_parts = sty_path.split(os.sep)
-        tex_parts = tex_path.split(os.sep)
+        input_parts = input_path.split(os.sep)
+        file_parts = file_path.split(os.sep)
     
         common_parts = []
-        for p1, p2 in zip(sty_parts, tex_parts):
+        for p1, p2 in zip(input_parts, file_parts):
             if p1 == p2:
                 common_parts.append(p1)
             else:
                 break
-    
+        
         if not common_parts:
-            result = sty_path
+            result = input_path
         else:
-            result_parts = sty_parts[len(common_parts):]
-            result = os.path.join(*result_parts)
+            result_parts = input_parts[len(common_parts):]
+            result = os.path.join(*result_parts) if result_parts else ""
     
         result = result.replace("\\", "/")
         result = result.replace(".sty", "")
+        result = result.replace(".tex", "")
         return result
 
 
-    def _setup_rules(self, position, rules):
+    def _setup_rules(self, position, rule_ids):
+        for i in range(position, len(self._fragments)):
+            fragment = self._fragments[i]
+            if fragment.without_rules:
+                continue
+            fragment.clear_rules()
+            for rule in rule_ids:
+                fragment.add_rule(rule)
+
+
+    def _add_rules(self, position, rules):
         for i in range(position, len(self._fragments)):
             fragment = self._fragments[i]
             if fragment.without_rules:

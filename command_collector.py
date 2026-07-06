@@ -82,7 +82,7 @@ def extract_next_command(content, position, command):
             raise ValueError(f"Cannot find parameters for command {command.name} in text.")
         cmd_params.append(_get_command_designation(content, position))
         position += len(cmd_params[-1]) + 2
-    cmd_name = content[match.start():position + 1]
+    cmd_name = content[match.start():position]
     cmd_impl = command.substitute_params(cmd_params)
 
     return cmd_name, cmd_impl, match.start()

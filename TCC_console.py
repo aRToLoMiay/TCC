@@ -23,11 +23,15 @@ def start_console_TCC():
     sty_files = collect_files('.sty')
 
     # Start processing.
-    processor = TccProcessor(tex_files_list=tex_files, sty_files_list=sty_files)
-    text = processor.process_tex(menu.result)
+    processor = TccProcessor(tex_files_list=tex_files, 
+                             sty_files_list=sty_files)
+    result = processor.process_tex(menu.result)
 
     # Result saving.
-    print(text)
+    for key in result.keys():
+        print(f"=== Start of fragment : {key} ===")
+        print(result[key])
+        print(f"===   End of fragment : {key} ===")
 
 
 def collect_files(file_type):
